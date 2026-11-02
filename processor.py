@@ -10,6 +10,8 @@ import json
 import math
 import re
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .stats import Stats
@@ -377,8 +379,7 @@ def _audit_memory(event: str, entry, relevance: float,
             "kind_confidence": round(confidence, 3),
         }
         with open(_AUDIT_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "
-")
+            f.write(json.dumps(rec, ensure_ascii=False) + chr(10))
     except Exception:  # noqa: BLE001
         pass
 

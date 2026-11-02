@@ -9,14 +9,15 @@ import httpx
 from maibot_sdk import Field, HookHandler, MaiBotPlugin, PluginConfigBase
 from maibot_sdk.types import ErrorPolicy, HookMode, HookOrder
 
-from .client import DEFAULT_API_URL, DEFAULT_MODEL, TypeSafeClient, resolve_key
+from .client import DEFAULT_API_URL, DEFAULT_MODEL, make_client, resolve_key
 from .hook_logic import run_before_request
 from .processor import Processor, Settings
+from .provider_presets import PRESETS, DEFAULT_PROVIDER, get_preset
 from .stats import Stats, should_log_stats
 
 logger = logging.getLogger(__name__)
 
-PLUGIN_VERSION = "0.3.0"
+PLUGIN_VERSION = "0.4.0"
 
 
 class PluginSectionConfig(PluginConfigBase):
@@ -37,8 +38,12 @@ class PreprocessorSectionConfig(PluginConfigBase):
     __ui_icon__ = "filter"
     __ui_order__ = 1
 
-    api_url: str = Field(default=DEFAULT_API_URL, description="TypeSafe System One API")
-    model: str = Field(default=DEFAULT_MODEL, description="Jev 模型")
+    provider: str = Field(
+        default=DEFAULT_PROVIDER,
+        description="判断服务商：typesafe / openrouter / opencode / commandcode / vercel / upstage / inception / liquid / cloudflare / openai",
+    )
+    api_url: str = Field(default="", description="API 地址；留空则按 provider 预设自动填充")
+    model: str = Field(default="", description="模型名；留空则按 provider 预设自动填充")
     api_key: str = Field(default="", description="留空则读取环境变量或 key 文件")
     key_file: str = Field(default="~/.typesafe_key", description="私有 key 文件路径")
     timeout_s: float = Field(default=1.5, description="单次 Jev 请求超时秒数")
@@ -76,7 +81,7 @@ class JevPreprocessorPlugin(MaiBotPlugin):
     def __init__(self) -> None:
         super().__init__()
         self._http: httpx.AsyncClient | None = None
-        self._client: TypeSafeClient | None = None
+        self._client: Any = None  # TypeSafeClient or OpenAIDecisionsClient
         self._processor: Processor | None = None
         # 统计跨配置重载保留，否则热重载一次计数就归零，观测失去意义。
         self._stats = Stats()
@@ -121,19 +126,25 @@ class JevPreprocessorPlugin(MaiBotPlugin):
             return
         logger.info(processor.stats.render())
 
-    def _configured_key(self) -> tuple[str, str]:
+    def _configured_key(self) -> tuple[str, str, str]:
         try:
             cfg = self.config.preprocessor
-            return str(cfg.api_key or ""), str(cfg.key_file or "")
+            return (
+                str(cfg.api_key or ""),
+                str(cfg.key_file or ""),
+                str(getattr(cfg, "provider", "") or DEFAULT_PROVIDER),
+            )
         except RuntimeError:
-            return "", "~/.typesafe_key"
+            return "", "~/.typesafe_key", DEFAULT_PROVIDER
 
     async def _evaluate(self, state: Dict[str, Any], questions: Dict[str, Dict[str, str]]) -> Dict[str, Any]:
         client = self._client
         if client is None:
             raise RuntimeError("client_not_ready")
-        configured, key_file = self._configured_key()
-        api_key = await asyncio.to_thread(resolve_key, configured, key_file)
+        configured, key_file, provider_id = self._configured_key()
+        api_key = await asyncio.to_thread(
+            resolve_key, configured, key_file, provider_id
+        )
         return await client.evaluate(api_key, state, questions)
 
     async def _rebuild_runtime(self) -> None:
@@ -141,16 +152,24 @@ class JevPreprocessorPlugin(MaiBotPlugin):
         self._http = httpx.AsyncClient()
         try:
             cfg = self.config.preprocessor
-            api_url = str(cfg.api_url or DEFAULT_API_URL)
-            model = str(cfg.model or DEFAULT_MODEL)
+            provider_id = str(getattr(cfg, "provider", "") or DEFAULT_PROVIDER)
+            api_url = str(cfg.api_url or "")  # empty → preset default
+            model = str(cfg.model or "")
             timeout_s = max(0.2, min(2.0, float(cfg.timeout_s)))
             settings = self._settings()
         except RuntimeError:
-            api_url = DEFAULT_API_URL
-            model = DEFAULT_MODEL
+            provider_id = DEFAULT_PROVIDER
+            api_url = ""
+            model = ""
             timeout_s = 1.5
             settings = Settings()
-        self._client = TypeSafeClient(http=self._http, api_url=api_url, model=model, timeout_s=timeout_s)
+        self._client = make_client(
+            http=self._http,
+            provider_id=provider_id,
+            api_url=api_url,
+            model=model,
+            timeout_s=timeout_s,
+        )
         self._processor = Processor(settings, evaluate=self._evaluate, stats=self._stats)
         if old_http is not None:
             await old_http.aclose()

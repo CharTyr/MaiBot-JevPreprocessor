@@ -88,7 +88,26 @@ breaker_failure_threshold = 3
 breaker_cooldown_s = 60.0
 ```
 
-密钥优先级：`TYPESAFE_API_KEY` 环境变量 → `api_key` 配置 → `TYPESAFE_KEY_FILE` / `key_file`。不要把密钥提交进版本库。
+密钥优先级：provider 对应的环境变量 → `api_key` 配置 → `key_file`。不要把密钥提交进版本库。
+
+各 provider 的环境变量名不同（如 `TYPESAFE_API_KEY`、`OPENROUTER_API_KEY`、`OPENAI_API_KEY` 等），也可在 `config.toml` 里直接填 `api_key`。
+
+### 支持的服务商
+
+| `provider` | 服务 | 默认模型 | 密钥环境变量 |
+|---|---|---|---|
+| `typesafe` | TypeSafe 官方 | `jev-1.13.0` | `TYPESAFE_API_KEY` |
+| `openrouter` | OpenRouter | `typesafe/jev-1.13` | `OPENROUTER_API_KEY` |
+| `opencode` | OpenCode Zen | `jev-1.13` | `OPENCODE_API_KEY` |
+| `commandcode` | Command Code | `typesafe/jev` | `COMMANDCODE_API_KEY` |
+| `vercel` | Vercel AI Gateway | `typesafe-ai/jev` | `VERCEL_API_KEY` |
+| `upstage` | Upstage Solar Decide | `solar-decide` | `UPSTAGE_API_KEY` |
+| `inception` | Inception Mercury Decide | `mercury-decide` | `INCEPTION_API_KEY` |
+| `liquid` | Liquid AI d1 | `d1` | `LIQUID_API_KEY` |
+| `cloudflare` | Cloudflare Clef | `clef-flash` | `CLOUDFLARE_API_KEY` + `CLOUDFLARE_ACCOUNT_ID` |
+| `openai` | OpenAI Decisions | `gpt-6-luna` | `OPENAI_API_KEY` |
+
+`api_url`/`model` 留空时按预设自动填充；Cloudflare 的 `{account_id}` 占位自动从 `CLOUDFLARE_ACCOUNT_ID` 环境变量替换。
 
 ## 测试
 
