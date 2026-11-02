@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 运行时生成
+/config.toml
+/jev_audit.jsonl
+/jev_audit.old
+*.bak
+*.bak.*
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
